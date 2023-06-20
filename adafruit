@@ -1,7 +1,8 @@
 import sys
-from Adafruit_IO import MQTTClient
 import random
 import time
+from Adafruit_IO import MQTTClient
+
 AIO_FEED_ID = "sensor-2"
 AIO_USERNAME = "hamthoi"
 AIO_KEY = "aio_CAwH56fvIvUd606NqIANcrpAIYQ5"
@@ -27,7 +28,8 @@ client.on_message = message
 client.on_subscribe = subscribe
 client.connect()
 client.loop_background()
-feed_key = "project"
+
+feed_key = "sensor-2"
 while True:
     time.sleep(5)
     value = random.randint(20, 70)
