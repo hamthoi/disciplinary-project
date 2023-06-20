@@ -4,7 +4,7 @@ import time
 import random
 AIO_FEED_ID = ""
 AIO_USERNAME = "hamthoi"
-AIO_KEY = "aio_oWfp30B5hyrbXfFTgOdnj3psVDNr"
+AIO_KEY = "aio_Zidk51sMGVBVPLbS37rgmJVtDei6"
 
 def connected(client):
     print("Ket noi thanh cong ...")
