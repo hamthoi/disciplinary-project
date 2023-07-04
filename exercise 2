@@ -1,0 +1,59 @@
+import time
+import random
+import sys
+from Adafruit_IO import MQTTClient
+
+AIO_USERNAME = "hamthoi"
+AIO_KEY = "aio_amzi51znM6hjZFJGWV8fPPowc2dT"
+
+def connected(client):
+    print("Server connected...")
+    client.subscribe("button1")
+    client.subscribe("button2")
+    client.subscribe("equation")
+    client.subscribe("sensor1")
+    client.subscribe("sensor2")
+    client.subscribe("sensor3")
+
+def subscribe(client, userdata, mid, granted_qos):
+    print("Subscribed!!!")
+
+def disconnected(client):
+    print("Disconnected from the server!!!")
+    sys.exit(1)
+
+def message(client, feed_id, payload):
+    print("Received: " + payload)
+    # Handle MQTT messages here
+
+client = MQTTClient(AIO_USERNAME, AIO_KEY)
+
+client.on_connect = connected
+client.on_disconnect = disconnected
+client.on_message = message
+client.on_subscribe = subscribe
+
+client.connect()
+
+while True:
+    try:
+        # Request data from sensors
+        a1 = random.randint(0, 100)
+        a2 = random.randint(0, 100)
+        a3 = random.randint(0, 100)
+        
+        # Publish sensor data to MQTT server
+        client.publish("sensor1", str(a1))
+        client.publish("sensor2", str(a2))
+        client.publish("sensor3", str(a3))
+        
+        time.sleep(2)  # Delay between sensor readings
+        
+        client.loop_blocking()  # Process MQTT messages
+
+    except KeyboardInterrupt:
+        print("Exiting...")
+        sys.exit(0)
+    except Exception as e:
+        print("An error occurred:", e)
+        sys.exit(1)
