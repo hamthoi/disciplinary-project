@@ -1,0 +1,228 @@
+import sys
+from Adafruit_IO import MQTTClient
+import random
+import time
+import serial.tools.list_ports
+import requests
+import certifi
+from datetime import date , datetime
+import cv2
+from keras.models import load_model
+from PIL import Image
+import numpy as np
+import io
+import base64
+np.set_printoptions(suppress=True)
+
+AIO_FEED_ID = ["fan", "light", "temp-sensor", "humi-sensor", "equation","gas-sensor","Today", "Time"]
+AIO_USERNAME ="hamthoi"
+AIO_KEY = "aio_NfMj651rKLBYS9i3Gyl6oTxZ3Ira"
+
+# Load the model
+model = load_model("keras_Model.h5", compile=False)
+
+# Load the labels
+class_names = open("labels.txt", "r").readlines()
+
+camera = cv2.VideoCapture(0)
+
+def compress_image(image , quality = 25 ): 
+    temp_image = Image.fromarray(image)
+    buffer = io.BytesIO()
+    temp_image.save(buffer, format = 'JPEG', quality = quality)
+    compressed_image = Image.open(buffer)
+    return np.array(compressed_image)
+
+def AI_Identifying(): 
+    ret, image = camera.read()
+    compressed_image = compress_image(image, quality=25)
+
+    res, frame = cv2.imencode(".jpg", compressed_image)
+    data = base64.b64encode(frame)
+    cv2.imshow("Webcam Image", compressed_image)
+
+    image = cv2.resize(compressed_image, (224, 224), interpolation=cv2.INTER_AREA)
+    image = np.asarray(image, dtype=np.float32).reshape(1, 224, 224, 3)
+    image = (image / 127.5) - 1
+
+    # Predicts the model
+    prediction = model.predict(image)
+    print(prediction)
+    index = np.argmax(prediction)
+    class_name = class_names[index]
+    confidence_score = prediction[0][index]
+    return class_name[2:], data
+
+
+def login():
+	password = "Lau Bar"
+	confirmation = str(input("Are house owner ??? [Y/N]: "))
+	if confirmation == "Y":
+		verification_code = str(input("Enter verification code, please:  "))
+		if verification_code == password:
+			correct_verification_code()
+		else:
+			while (wrong_verification_code() != password):
+				wrong_verification_code()
+			correct_verification_code()
+	else: 
+		input("You cannot access this program, the program will end immediately!!! ")
+		quit()
+
+def correct_verification_code():
+	print("Logged in successfully")
+	print("System started working...")
+	print("=========================")
+def wrong_verification_code():
+	print("===============================")
+	print("Your verification code is wrong")
+	verification_code = str(input("Enter your verification code again: "))
+	return verification_code
+
+def connected(client):
+	for feed in AIO_FEED_ID:
+		client.subscribe(feed)
+		print("Connected successfully...")
+
+def subscribe(client, userdata, mid, granted_qos):
+	print("Subscribe successfully....")
+
+def disconnected(client):
+	sys.exit(1)
+	print("Already disconnected ...")
+
+def value(x):
+	switcher = {
+		"0": 'Fan is turned OFF',
+		"1": 'Fan is turned ON',
+		"2": 'Light is turned OFF',
+		"3": 'Light is turned ON'
+	}
+	return switcher.get(x,"Other")
+
+def message(client, feed_id, payload):
+	print("Received: " + payload)
+	print(value(payload))
+	if connectedCenterMicrobit:
+		ser.write((str(payload) + "#" ).encode())
+
+
+#Hàm giúp tự động tìm kiếm cổng COM khi kết nối Microbit trung tâm vào, chỉ cần điều chỉnh tên cho phù hợp với tên thiết bị hiển thị
+def getPort():
+	ports = serial.tools.list_ports.comports()
+	N = len(ports)
+	commPort = "None"
+	for i in range (0,N): 
+		port = ports[i]
+		strPort = str(port)
+		if "USB Serial Device" in strPort:
+			splitPort = strPort.split(" ")
+			commPort = (splitPort[0])
+	return commPort
+
+
+
+#Hàm xử lý thông tin nhận từ Microbit để gửi lên Adafruit
+def processData(data):  	#E.g: 	!1:TEMP:<nhiet do>#
+	data = data.replace("!", "") #   1:TEMP:<nhiet do># 
+	data = data.replace("#", "") #   1:TEMP:<nhiet do>	
+	splitData = data.split(":")  #   1 TEMP <nhiet do>
+	print(splitData)
+	try: 			 # ['1', 'TEMP', '<nhiet do>']
+		if splitData[1] == "TEMP":
+			client.publish("temp-sensor", splitData[2])
+			global Temp
+			Temp = float(splitData[2])
+			print(" Temperature is: ",splitData[2])
+		elif splitData[1] == "HUMI":
+			client.publish("humi-sensor", splitData[2])
+			global Humi
+			Humi = float(splitData[2])
+			print(" Humidity is: ",splitData[2] )
+		elif splitData[1] == "GAS":
+			value = float(splitData[2] / 3300 * 100)
+			client.publish("gas-sensor",value)
+			print("Gas concentration (%) is: ",value)
+	except:
+		pass
+
+mess = ""
+def readSerial():
+	bytesToRead = ser.inWaiting()
+	if (bytesToRead > 0):
+		global mess
+		mess = mess + ser.read(bytesToRead).decode("UTF-8")
+		while ("#" in mess) and ("! in mess"):
+			start = mess.find("!")
+			end = mess.find("#")
+			processData(mess[start:end +1])
+			if (end == len(mess)):
+				mess = ""
+			else:
+				mess = mess[end + 1:]
+
+def init_global_equation():
+    global global_equation
+    headers = {}
+    aio_url = "https://io.adafruit.com/api/v2/hamthoi/feeds/equation"
+    x = requests.get(url=aio_url, headers=headers, verify=certifi.where())
+    data = x.json()
+    global_equation = data["last_value"]    
+    print("Get lastest value:", global_equation)
+
+def modify_value(x1, x2):
+    global global_equation
+    print("Equation: ", global_equation)
+    result = eval(global_equation)
+    print("Heat Index is: ",result)
+    return result
+
+connectedCenterMicrobit = False #Trường hợp chưa kết nối cổng Microbit trung tâm với máy tính
+if getPort() != "None":
+	ser = serial.Serial(port = getPort(), baudrate = 115200)
+	connectedMicrobit = True 
+
+login()
+
+client = MQTTClient(AIO_USERNAME, AIO_KEY)
+client.on_connect = connected
+client.on_disconnect = disconnected
+client.on_message = message
+client.on_subscribe = subscribe
+client.connect()
+client.loop_background()
+init_global_equation()
+
+pre_ai_result = ""
+ai_results = ""
+count = 10
+
+while True:
+    count = count -1
+    if count == 0 :
+        count = 10
+        pre_ai_result = ai_results
+        ai_results , ai_cap = AI_Identifying ()
+        if pre_ai_result != ai_results :
+
+            now = datetime . now ()
+            today = date . today ()
+            client . publish (" Time ", now.strftime("%H hours %M minutes %S seconds ") )                
+            client . publish (" Today ", today . strftime("%B %d, %Y") )
+            client . publish (" Person ", ai_results )
+            client . publish (" AI_Camera ", ai_cap )
+            
+    if connectedCenterMicrobit:
+        readSerial()
+        heat_index = modify_value(Temp, Humi)
+        if heat_index > 25: #Con người cảm thấy thoải mái với nhiệt độ môi trường từ 20 - 25℃
+            client.publish("fan",1)
+            print("The fan was automatically turned ON")
+        else:
+            client.publish("fan",0)
+            print("Fhe fan was automatically turned OFF ")
+
+    time.sleep(1) #Thời gian Gatewate nhỏ để sẵn sàng nhận dữ liệu
+    keyboard_input = cv2.waitKey(1)
+    if keyboard_input == 27:
+        break
