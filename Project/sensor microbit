@@ -1,0 +1,34 @@
+def on_received_number(receivedNumber):
+    if receivedNumber == 0:
+        pins.digital_write_pin(DigitalPin.P0, 0)
+    elif receivedNumber == 1:
+        pins.digital_write_pin(DigitalPin.P0, 1)
+    elif receivedNumber == 2:
+        pins.digital_write_pin(DigitalPin.P1, 0)
+    elif receivedNumber == 3:
+        pins.digital_write_pin(DigitalPin.P1, 1)
+radio.on_received_number(on_received_number)
+
+gas_mV = 0
+gas_raw = 0
+basic.show_icon(IconNames.HEART)
+radio.set_group(1)
+led.enable(False)
+
+def on_forever():
+    global gas_raw, gas_mV
+    NPNBitKit.dht11_read(DigitalPin.P3)
+    radio.send_string("!1:TEMP:" + ("" + str(NPNBitKit.dht11_temp())) + "#")
+    basic.pause(100)
+    radio.send_string("!1:HUMI:" + ("" + str(NPNBitKit.dht11_hum())) + "#")
+    basic.pause(100)
+    gas_raw = pins.analog_read_pin(AnalogPin.P2)
+    gas_mV = Math.map(gas_raw, 0, 1023, 0, 3300)
+    radio.send_string("!1:GAS:" + ("" + str(gas_mV)) + "#")
+    if gas_mV >= 59.4:
+        music.play(music.string_playable("G B A G C5 B A B ", 200),
+            music.PlaybackMode.UNTIL_DONE)
+    else:
+        music.stop_all_sounds()
+    basic.pause(30000)
+basic.forever(on_forever)
